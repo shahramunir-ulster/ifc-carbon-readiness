@@ -9,6 +9,7 @@ import streamlit as st
 
 from src.analytics import aggregate_by_material, aggregate_by_storey, aggregate_by_type, issue_breakdown, top_carbon_elements
 from src.assessment import process_element_record
+from src.charts import horizontal_bar_chart
 from src.data_readiness import compute_readiness_metrics
 from src.demo_data import build_demo_element_rows, build_demo_factor_database
 from src.presentation import carbon_display_tonnes, carbon_headline
@@ -40,8 +41,24 @@ st.markdown(
         background: rgba(255,255,255,.94); border: 1px solid #dcebe7;
         border-radius: 14px; padding: 1rem 1.1rem; box-shadow: 0 5px 18px rgba(20,70,60,.06);
     }
-    [data-testid="stMetricLabel"] { color: #48645e; }
-    [data-testid="stMetricValue"] { color: var(--carbon-ink); }
+    [data-testid="stMetricLabel"] {
+        color: #48645e; min-height: 3rem; align-items: flex-start;
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
+    }
+    [data-testid="stMetricValue"] {
+        color: var(--carbon-ink); white-space: normal !important;
+        overflow: visible !important; text-overflow: clip !important;
+    }
+    [data-testid="stMetric"] { min-height: 9.5rem; }
+    [data-testid="stMetricLabel"] p,
+    [data-testid="stMetricLabel"] > div,
+    [data-testid="stMetricValue"] > div {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.25 !important;
+    }
     .stTabs [data-baseweb="tab-list"] { gap: .35rem; border-bottom: 1px solid #dcebe7; }
     .stTabs [data-baseweb="tab"] { border-radius: 9px 9px 0 0; padding: .55rem .9rem; }
     .stTabs [aria-selected="true"] { background: var(--carbon-soft); color: var(--carbon-green); }
@@ -381,7 +398,8 @@ with upload:
 
 with dashboard:
     st.subheader('Processing status')
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3 = st.columns(3)
+    col4, col5, col6 = st.columns(3)
     col1.metric('IFC elements detected', assessment_scope.get('total_ifc_elements', len(elements)))
     col2.metric('In-scope elements', len(elements))
     col3.metric('Review required', assessment_scope.get('review_required_elements', 0))
@@ -403,18 +421,25 @@ with dashboard:
 
     st.subheader('Carbon assessment coverage')
     st.caption('These indicators also depend on the supplied carbon-factor dataset and calculation compatibility.')
-    carbon_metric_cols = st.columns(6)
-    carbon_metric_cols[0].metric(carbon_metric_label, carbon_display_tonnes(carbon_total))
-    carbon_metric_cols[1].metric('Factor coverage of eligible elements', f"{metrics['factor_coverage_rate']:.1f}%")
-    carbon_metric_cols[2].metric('Factor match success when attempted', f"{metrics['factor_match_success_rate']:.1f}%")
-    carbon_metric_cols[3].metric('Calculation success rate', f"{metrics['calculation_success_rate']:.1f}%")
-    carbon_metric_cols[4].metric('Genuine unmatched materials', metrics['unmatched_materials'])
-    carbon_metric_cols[5].metric('Multiple-material review', metrics['multiple_material_elements'])
+    carbon_metric_top = st.columns(3)
+    carbon_metric_bottom = st.columns(3)
+    carbon_metric_top[0].metric(carbon_metric_label, carbon_display_tonnes(carbon_total))
+    carbon_metric_top[1].metric('Factor coverage of eligible elements', f"{metrics['factor_coverage_rate']:.1f}%")
+    carbon_metric_top[2].metric('Factor match success when attempted', f"{metrics['factor_match_success_rate']:.1f}%")
+    carbon_metric_bottom[0].metric('Calculation success rate', f"{metrics['calculation_success_rate']:.1f}%")
+    carbon_metric_bottom[1].metric('Genuine unmatched materials', metrics['unmatched_materials'])
+    carbon_metric_bottom[2].metric('Multiple-material review', metrics['multiple_material_elements'])
 
     material_chart = aggregate_by_material(elements)
     if not material_chart.empty:
         st.subheader('Carbon by controlled factor category')
-        st.bar_chart(material_chart.set_index('matched_material_name')['embodied_carbon_kgco2e'])
+        st.altair_chart(
+            horizontal_bar_chart(
+                material_chart, 'matched_material_name', 'embodied_carbon_kgco2e',
+                'Calculated A1-A3 carbon (kgCO2e)',
+            ),
+            width='stretch',
+        )
 
     hotspot_df = top_carbon_elements(elements, limit=10)
     if not hotspot_df.empty:
@@ -425,17 +450,26 @@ with dashboard:
     type_chart = aggregate_by_type(elements)
     if not type_chart.empty:
         colA.subheader('Carbon by element type')
-        colA.bar_chart(type_chart.set_index('ifc_class')['embodied_carbon_kgco2e'])
+        colA.altair_chart(
+            horizontal_bar_chart(type_chart, 'ifc_class', 'embodied_carbon_kgco2e', 'kgCO2e'),
+            width='stretch',
+        )
     storey_chart = aggregate_by_storey(elements)
     if not storey_chart.empty:
         colB.subheader('Carbon by storey')
-        colB.bar_chart(storey_chart.set_index('storey')['embodied_carbon_kgco2e'])
+        colB.altair_chart(
+            horizontal_bar_chart(storey_chart, 'storey', 'embodied_carbon_kgco2e', 'kgCO2e'),
+            width='stretch',
+        )
 
     issue_df = issue_breakdown(elements)
     if not issue_df.empty:
         st.subheader('Missing-data breakdown')
         st.caption('This chart counts issue occurrences; one element may contribute more than one issue.')
-        st.bar_chart(issue_df.set_index('issue')['count'])
+        st.altair_chart(
+            horizontal_bar_chart(issue_df, 'issue', 'count', 'Issue occurrences', color='#d97706'),
+            width='stretch',
+        )
 
     st.markdown('---')
     st.subheader('Element-level results')
