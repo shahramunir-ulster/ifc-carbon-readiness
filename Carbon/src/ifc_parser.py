@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import gc
 from pathlib import Path
 import re
 from typing import Any, Dict, List
@@ -286,7 +287,7 @@ def parse_ifc_file(file_path: str | Path) -> Dict[str, Any]:
 
     project = model.by_type('IfcProject')
     project_data = project[0] if project else None
-    return {
+    result = {
         'elements': elements,
         'metadata': {
             'project_name': getattr(project_data, 'Name', None) or '',
@@ -305,3 +306,8 @@ def parse_ifc_file(file_path: str | Path) -> Dict[str, Any]:
         'extraction_error_count': extraction_error_count,
         'error_count': extraction_error_count,
     }
+    # Release IfcOpenShell's model graph before Streamlit renders the result.
+    # Large IFC files can otherwise keep hundreds of MB alive until a later GC.
+    del project_data, project, all_elements, model
+    gc.collect()
+    return result
