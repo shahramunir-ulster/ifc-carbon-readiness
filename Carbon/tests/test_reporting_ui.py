@@ -94,6 +94,8 @@ def test_app_persists_assessment_result_for_filter_reruns():
     source = (Path(__file__).resolve().parents[1] / 'app.py').read_text(encoding='utf-8')
     assert 'st.session_state.assessment_result = result' in source
     assert "assessment_result = st.session_state.assessment_result" in source
-    assert '@st.cache_data(show_spinner=False, max_entries=2, ttl=3600)' in source
+    assert 'def run_live_assessment(ifc_bytes: bytes | memoryview, factor_bytes: bytes)' in source
+    assert '@st.cache_data(show_spinner=False, max_entries=2, ttl=3600)' not in source
+    assert 'uploaded_file.getbuffer()' in source
     assert "input_signature = 'mode:demo' if is_demo_run else 'mode:live'" in source
     assert 'st.session_state.assessment_excel_bytes' in source
