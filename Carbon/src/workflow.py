@@ -12,7 +12,7 @@ from src.data_readiness import build_processing_error_record
 from src.ifc_parser import parse_ifc_file, validate_ifc_file
 
 
-def assess_ifc_bytes(ifc_bytes: bytes, factor_bytes: bytes) -> dict:
+def assess_ifc_bytes(ifc_bytes: bytes | bytearray | memoryview, factor_bytes: bytes) -> dict:
     """Run one complete live assessment and return cache/session-safe results."""
     factor_df = load_carbon_factor_csv(StringIO(factor_bytes.decode('utf-8-sig')))
     temporary_path: Path | None = None
