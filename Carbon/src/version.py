@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 
-APPLICATION_VERSION = '1.2.2'
+APPLICATION_VERSION = '1.2.3'
 
 
 def source_tree_sha256(root: str | Path) -> str:
