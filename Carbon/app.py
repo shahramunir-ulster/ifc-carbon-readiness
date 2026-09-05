@@ -82,8 +82,8 @@ def get_demo_data():
     return build_demo_element_rows(), build_demo_factor_database()
 
 
-@st.cache_data(show_spinner=False, max_entries=2, ttl=3600)
-def run_cached_live_assessment(ifc_bytes: bytes, factor_bytes: bytes) -> dict:
+def run_live_assessment(ifc_bytes: bytes | memoryview, factor_bytes: bytes) -> dict:
+    """Process uploaded data once without retaining a second global cache copy."""
     return assess_ifc_bytes(ifc_bytes, factor_bytes)
 
 
@@ -142,15 +142,21 @@ with st.sidebar:
 
 is_demo_run = bool(use_demo and uploaded_file is None)
 input_signature = 'mode:demo' if is_demo_run else 'mode:live'
-input_bytes = None
+input_buffer = None
+input_sha256 = 'not_applicable'
 factor_bytes = None
+factor_sha256 = 'not_applicable'
 if uploaded_file is not None:
-    input_bytes = uploaded_file.getvalue()
-    input_signature += f':ifc:{uploaded_file.name}:{hashlib.sha256(input_bytes).hexdigest()}'
+    # UploadedFile already lives in RAM. getbuffer() avoids making another full
+    # bytes copy, which matters for large IFC files on Community Cloud.
+    input_buffer = uploaded_file.getbuffer()
+    input_sha256 = hashlib.sha256(input_buffer).hexdigest()
+    input_signature += f':ifc:{uploaded_file.name}:{input_sha256}'
 if uploaded_factor_file is not None:
     factor_bytes = uploaded_factor_file.getvalue()
+    factor_sha256 = hashlib.sha256(factor_bytes).hexdigest()
     if not is_demo_run:
-        input_signature += f':factor:{hashlib.sha256(factor_bytes).hexdigest()}'
+        input_signature += f':factor:{factor_sha256}'
 
 if st.session_state.get('assessment_input_signature') != input_signature:
     st.session_state.assessment_input_signature = input_signature
@@ -174,10 +180,13 @@ if run_requested:
                 }
                 result = {'elements': elements, 'factor_df': factor_df, 'assessment_scope': assessment_scope}
             else:
-                if input_bytes is None or factor_bytes is None:
+                if input_buffer is None or factor_bytes is None:
                     raise ValueError('Upload both an IFC file and a verified A1-A3 factor CSV.')
-                result = run_cached_live_assessment(input_bytes, factor_bytes)
+                result = run_live_assessment(input_buffer, factor_bytes)
         result['assessment_generated_utc'] = datetime.now(timezone.utc).isoformat()
+        result['assessed_file_name'] = 'demo_dataset' if is_demo_run else uploaded_file.name
+        result['assessed_file_sha256'] = input_sha256
+        result['factor_file_sha256'] = factor_sha256
         st.session_state.assessment_result = result
         st.session_state.assessment_started = True
         st.session_state.assessment_export_signature = None
@@ -204,8 +213,8 @@ if is_demo_run:
     assessed_file_name = 'demo_dataset'
     assessed_file_sha256 = 'not_applicable'
 else:
-    assessed_file_name = uploaded_file.name
-    assessed_file_sha256 = hashlib.sha256(input_bytes).hexdigest()
+    assessed_file_name = assessment_result.get('assessed_file_name', uploaded_file.name)
+    assessed_file_sha256 = assessment_result.get('assessed_file_sha256', input_sha256)
 
 scope_report_df = pd.DataFrame(assessment_scope.get('scope_report', []))
 if not elements:
@@ -289,7 +298,7 @@ summary_rows = [
     {'metric': 'input_file_name', 'value': assessed_file_name},
     {'metric': 'input_file_sha256', 'value': assessed_file_sha256},
     {'metric': 'factor_file_name', 'value': 'demo_factor_table' if is_demo_run else uploaded_factor_file.name},
-    {'metric': 'factor_file_sha256', 'value': 'not_applicable' if is_demo_run else hashlib.sha256(factor_bytes).hexdigest()},
+    {'metric': 'factor_file_sha256', 'value': assessment_result.get('factor_file_sha256', factor_sha256)},
     {'metric': 'assessment_boundary', 'value': 'A1-A3'},
     {'metric': 'ifc_elements_detected', 'value': assessment_scope.get('total_ifc_elements', len(elements))},
     {'metric': 'in_scope_elements', 'value': len(elements)},
